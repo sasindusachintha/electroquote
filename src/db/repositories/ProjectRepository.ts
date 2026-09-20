@@ -114,7 +114,7 @@ export class ProjectRepository {
         input.name,
         input.siteAddress ?? null,
         input.description ?? null,
-        input.status,
+        input.status || 'active',
         id,
       ]
     );

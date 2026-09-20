@@ -1,19 +1,19 @@
 // src/hooks/useLabour.ts
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getDatabase } from '../db/client';
+import { useSQLiteContext } from 'expo-sqlite';
 import { LabourRepository } from '../db/repositories/LabourRepository';
 import type { LabourItem, LabourItemInput } from '../types/models';
 
 export const LABOUR_QUERY_KEY = ['labour'];
 
 export function useLabourItems(searchQuery?: string) {
+  const db = useSQLiteContext();
+  const repo = new LabourRepository(db);
+
   return useQuery({
     queryKey: [...LABOUR_QUERY_KEY, searchQuery ?? ''],
     queryFn: async (): Promise<LabourItem[]> => {
-      const db = await getDatabase();
-      const repo = new LabourRepository(db);
-
       if (searchQuery && searchQuery.trim().length > 0) {
         return repo.search(searchQuery.trim());
       }
@@ -23,12 +23,13 @@ export function useLabourItems(searchQuery?: string) {
 }
 
 export function useLabourItem(id?: number) {
+  const db = useSQLiteContext();
+  const repo = new LabourRepository(db);
+
   return useQuery({
     queryKey: [...LABOUR_QUERY_KEY, id],
     queryFn: async (): Promise<LabourItem | null> => {
       if (!id) return null;
-      const db = await getDatabase();
-      const repo = new LabourRepository(db);
       return repo.getById(id);
     },
     enabled: !!id,
@@ -36,12 +37,12 @@ export function useLabourItem(id?: number) {
 }
 
 export function useCreateLabour() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new LabourRepository(db);
 
   return useMutation({
     mutationFn: async (input: LabourItemInput) => {
-      const db = await getDatabase();
-      const repo = new LabourRepository(db);
       return repo.create(input);
     },
     onSuccess: () => {
@@ -51,12 +52,12 @@ export function useCreateLabour() {
 }
 
 export function useUpdateLabour() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new LabourRepository(db);
 
   return useMutation({
     mutationFn: async ({ id, input }: { id: number; input: LabourItemInput }) => {
-      const db = await getDatabase();
-      const repo = new LabourRepository(db);
       return repo.update(id, input);
     },
     onSuccess: () => {
@@ -66,12 +67,12 @@ export function useUpdateLabour() {
 }
 
 export function useDeactivateLabour() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new LabourRepository(db);
 
   return useMutation({
     mutationFn: async (id: number) => {
-      const db = await getDatabase();
-      const repo = new LabourRepository(db);
       return repo.deactivate(id);
     },
     onSuccess: () => {

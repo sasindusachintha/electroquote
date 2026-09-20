@@ -5,19 +5,27 @@
 import * as SQLite from 'expo-sqlite';
 import { runMigrations } from './migrations/runner';
 
-let _db: SQLite.SQLiteDatabase | null = null;
+let _dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
-  if (_db) return _db;
-  _db = await SQLite.openDatabaseAsync('electroquote.db');
-  // Enable WAL mode for better concurrent performance
-  await _db.execAsync('PRAGMA journal_mode = WAL;');
-  await _db.execAsync('PRAGMA foreign_keys = ON;');
-  await runMigrations(_db);
-  return _db;
+  if (!_dbPromise) {
+    _dbPromise = (async () => {
+      try {
+        const db = await SQLite.openDatabaseAsync('electroquote.db');
+        await db.execAsync('PRAGMA journal_mode = WAL;');
+        await db.execAsync('PRAGMA foreign_keys = ON;');
+        await runMigrations(db);
+        return db;
+      } catch (err) {
+        _dbPromise = null;
+        throw err;
+      }
+    })();
+  }
+  return _dbPromise;
 }
 
 /** For use in tests — resets the singleton */
 export function _resetDatabaseForTesting() {
-  _db = null;
+  _dbPromise = null;
 }

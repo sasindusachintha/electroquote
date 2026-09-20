@@ -14,7 +14,7 @@ import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../../src/constants/theme';
 import { useProjects } from '../../src/hooks/useProjects';
-import { getDatabase } from '../../src/db/client';
+import { useSQLiteContext } from 'expo-sqlite';
 import { QuotationRepository } from '../../src/db/repositories/QuotationRepository';
 import type { QuotationSummary } from '../../src/types/models';
 
@@ -104,15 +104,15 @@ function ProjectsSection() {
 }
 
 function RecentQuotationsSection() {
+  const db = useSQLiteContext();
   const [quotations, setQuotations] = useState<QuotationSummary[]>([]);
 
   useEffect(() => {
-    getDatabase().then(async (db) => {
-      const repo = new QuotationRepository(db);
-      const all = await repo.getAll();
+    const repo = new QuotationRepository(db);
+    repo.getAll().then((all) => {
       setQuotations(all.slice(0, 3));
     }).catch(() => {});
-  }, []);
+  }, [db]);
 
   return (
     <View style={{ marginTop: Spacing.md }}>

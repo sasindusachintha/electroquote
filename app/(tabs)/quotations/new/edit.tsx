@@ -16,9 +16,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { showMessage } from 'react-native-flash-message';
 
+import { useSQLiteContext } from 'expo-sqlite';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../../../../src/constants/theme';
 import { useQuotationDraftStore } from '../../../../src/stores/quotationDraftStore';
-import { getDatabase } from '../../../../src/db/client';
 import { BusinessProfileRepository } from '../../../../src/db/repositories/BusinessProfileRepository';
 import { QuotationRepository } from '../../../../src/db/repositories/QuotationRepository';
 import { ReferenceService } from '../../../../src/services/ReferenceService';
@@ -39,6 +39,7 @@ import type {
 } from '../../../../src/types/models';
 
 export default function QuotationBuilderScreen() {
+  const db = useSQLiteContext();
   const { customerId: paramCustId, projectId: paramProjId, id: paramId } = useLocalSearchParams<{
     customerId?: string;
     projectId?: string;
@@ -78,7 +79,6 @@ export default function QuotationBuilderScreen() {
   // Load Business Profile & Init Draft
   useEffect(() => {
     async function loadProfile() {
-      const db = await getDatabase();
       const repo = new BusinessProfileRepository(db);
       const profile = await repo.get();
       setBusinessProfile(profile);
@@ -190,7 +190,6 @@ export default function QuotationBuilderScreen() {
 
     setIsSaving(true);
     try {
-      const db = await getDatabase();
       const qRepo = new QuotationRepository(db);
       const refNo = await ReferenceService.next(db);
       const currencySymbol = businessProfile?.currencySymbol || 'Rs.';

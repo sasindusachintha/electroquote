@@ -1,19 +1,19 @@
 // src/hooks/useProjects.ts
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getDatabase } from '../db/client';
+import { useSQLiteContext } from 'expo-sqlite';
 import { ProjectRepository } from '../db/repositories/ProjectRepository';
 import type { ProjectWithCustomer, ProjectInput, ProjectStatus } from '../types/models';
 
 export const PROJECTS_QUERY_KEY = ['projects'];
 
 export function useProjects(searchQuery?: string, customerId?: number, includeArchived = false) {
+  const db = useSQLiteContext();
+  const repo = new ProjectRepository(db);
+
   return useQuery({
     queryKey: [...PROJECTS_QUERY_KEY, searchQuery ?? '', customerId ?? 'all', includeArchived],
     queryFn: async (): Promise<ProjectWithCustomer[]> => {
-      const db = await getDatabase();
-      const repo = new ProjectRepository(db);
-
       if (searchQuery && searchQuery.trim().length > 0) {
         return repo.search(searchQuery.trim(), customerId);
       }
@@ -26,12 +26,13 @@ export function useProjects(searchQuery?: string, customerId?: number, includeAr
 }
 
 export function useProject(id?: number) {
+  const db = useSQLiteContext();
+  const repo = new ProjectRepository(db);
+
   return useQuery({
     queryKey: [...PROJECTS_QUERY_KEY, id],
     queryFn: async (): Promise<ProjectWithCustomer | null> => {
       if (!id) return null;
-      const db = await getDatabase();
-      const repo = new ProjectRepository(db);
       return repo.getById(id);
     },
     enabled: !!id,
@@ -39,12 +40,12 @@ export function useProject(id?: number) {
 }
 
 export function useCreateProject() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new ProjectRepository(db);
 
   return useMutation({
     mutationFn: async (input: ProjectInput) => {
-      const db = await getDatabase();
-      const repo = new ProjectRepository(db);
       return repo.create(input);
     },
     onSuccess: () => {
@@ -54,12 +55,12 @@ export function useCreateProject() {
 }
 
 export function useUpdateProject() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new ProjectRepository(db);
 
   return useMutation({
     mutationFn: async ({ id, input }: { id: number; input: ProjectInput }) => {
-      const db = await getDatabase();
-      const repo = new ProjectRepository(db);
       return repo.update(id, input);
     },
     onSuccess: () => {
@@ -69,12 +70,12 @@ export function useUpdateProject() {
 }
 
 export function useUpdateProjectStatus() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new ProjectRepository(db);
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: number; status: ProjectStatus }) => {
-      const db = await getDatabase();
-      const repo = new ProjectRepository(db);
       return repo.updateStatus(id, status);
     },
     onSuccess: () => {
@@ -84,12 +85,12 @@ export function useUpdateProjectStatus() {
 }
 
 export function useArchiveProject() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new ProjectRepository(db);
 
   return useMutation({
     mutationFn: async (id: number) => {
-      const db = await getDatabase();
-      const repo = new ProjectRepository(db);
       return repo.archive(id);
     },
     onSuccess: () => {
@@ -99,12 +100,12 @@ export function useArchiveProject() {
 }
 
 export function useDeleteProject() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new ProjectRepository(db);
 
   return useMutation({
     mutationFn: async (id: number) => {
-      const db = await getDatabase();
-      const repo = new ProjectRepository(db);
       return repo.delete(id);
     },
     onSuccess: () => {

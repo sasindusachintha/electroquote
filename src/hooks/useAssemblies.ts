@@ -1,19 +1,19 @@
 // src/hooks/useAssemblies.ts
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getDatabase } from '../db/client';
+import { useSQLiteContext } from 'expo-sqlite';
 import { AssemblyRepository } from '../db/repositories/AssemblyRepository';
 import type { AssemblyDetail, AssemblyInput } from '../types/models';
 
 export const ASSEMBLIES_QUERY_KEY = ['assemblies'];
 
 export function useAssemblies(searchQuery?: string, categoryId?: number) {
+  const db = useSQLiteContext();
+  const repo = new AssemblyRepository(db);
+
   return useQuery({
     queryKey: [...ASSEMBLIES_QUERY_KEY, searchQuery ?? '', categoryId ?? 'all'],
     queryFn: async (): Promise<AssemblyDetail[]> => {
-      const db = await getDatabase();
-      const repo = new AssemblyRepository(db);
-
       if (searchQuery && searchQuery.trim().length > 0) {
         return repo.search(searchQuery.trim(), categoryId);
       }
@@ -23,12 +23,13 @@ export function useAssemblies(searchQuery?: string, categoryId?: number) {
 }
 
 export function useAssembly(id?: number) {
+  const db = useSQLiteContext();
+  const repo = new AssemblyRepository(db);
+
   return useQuery({
     queryKey: [...ASSEMBLIES_QUERY_KEY, id],
     queryFn: async (): Promise<AssemblyDetail | null> => {
       if (!id) return null;
-      const db = await getDatabase();
-      const repo = new AssemblyRepository(db);
       return repo.getById(id);
     },
     enabled: !!id,
@@ -36,12 +37,12 @@ export function useAssembly(id?: number) {
 }
 
 export function useCreateAssembly() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new AssemblyRepository(db);
 
   return useMutation({
     mutationFn: async (input: AssemblyInput) => {
-      const db = await getDatabase();
-      const repo = new AssemblyRepository(db);
       return repo.create(input);
     },
     onSuccess: () => {
@@ -51,12 +52,12 @@ export function useCreateAssembly() {
 }
 
 export function useUpdateAssembly() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new AssemblyRepository(db);
 
   return useMutation({
     mutationFn: async ({ id, input }: { id: number; input: AssemblyInput }) => {
-      const db = await getDatabase();
-      const repo = new AssemblyRepository(db);
       return repo.update(id, input);
     },
     onSuccess: () => {
@@ -66,12 +67,12 @@ export function useUpdateAssembly() {
 }
 
 export function useDuplicateAssembly() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new AssemblyRepository(db);
 
   return useMutation({
     mutationFn: async (id: number) => {
-      const db = await getDatabase();
-      const repo = new AssemblyRepository(db);
       return repo.duplicate(id);
     },
     onSuccess: () => {
@@ -81,12 +82,12 @@ export function useDuplicateAssembly() {
 }
 
 export function useToggleFavouriteAssembly() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new AssemblyRepository(db);
 
   return useMutation({
     mutationFn: async (id: number) => {
-      const db = await getDatabase();
-      const repo = new AssemblyRepository(db);
       return repo.toggleFavourite(id);
     },
     onSuccess: () => {
@@ -96,12 +97,12 @@ export function useToggleFavouriteAssembly() {
 }
 
 export function useDeactivateAssembly() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const repo = new AssemblyRepository(db);
 
   return useMutation({
     mutationFn: async (id: number) => {
-      const db = await getDatabase();
-      const repo = new AssemblyRepository(db);
       return repo.deactivate(id);
     },
     onSuccess: () => {
