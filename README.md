@@ -22,7 +22,7 @@ ElectroQuote is a powerful, mobile application designed specifically for electri
 
 ## 🛠 Tech Stack
 
-- **Framework**: [Expo SDK 57](https://expo.dev/) (React Native 0.86, React 19)
+- **Framework**: [Expo SDK 57](https://expo.dev/) (React Native 0.86, React 19).
 - **Navigation**: [Expo Router v4](https://docs.expo.dev/router/introduction/) (File-based, typed routing)
 - **Database**: [Expo SQLite](https://docs.expo.dev/versions/latest/sdk/sqlite/) with versioned SQL schema migrations
 - **State Management**: [Zustand](https://github.com/pmndrs/zustand) & [React Query (TanStack)](https://tanstack.com/query/latest)
