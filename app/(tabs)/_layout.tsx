@@ -69,6 +69,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="ai"
+        options={{
+          title: 'AI',
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name="robot-excited-outline" focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
