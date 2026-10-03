@@ -39,7 +39,7 @@ ElectroQuote is a powerful, mobile application designed specifically for electri
 Ensure you have the following installed on your development machine:
 
 - **Node.js** (v18.x or later).
-- **npm** or **yarn** or **pnpm**
+- **npm** or **yarn** or **pnpm**.
 - **Expo Go** app on iOS/Android OR an Android Studio / Xcode emulator setup
 
 ### Installation
