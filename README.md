@@ -2,7 +2,7 @@
 
 > **Professional Offline-First Mobile Quotation & Estimation Tool for Electrical Contractors**
 
-ElectroQuote is a powerful, mobile application designed specifically for electricians, electrical contractors, and tradespeople. It streamlines the job estimation process, allowing contractors to manage material/labour catalogues, build reusable component assemblies, calculate accurate job costs with markups and wastage, and generate polished PDF quotations on-the-go — completely offline.
+ElectroQuote is a powerful, mobile application designed specifically for electricians, electrical contractors, and tradespeople. It streamlines the job estimation process, allowing contractors to manage material/labour catalogues, build reusable component assemblies, calculate accurate job costs with markups and wastage, and generate polished PDF quotations on-the-go - completely offline.
 
 ---
 
