@@ -2,7 +2,7 @@
 
 > **Professional Offline-First Mobile Quotation & Estimation Tool for Electrical Contractors**
 
-ElectroQuote is a powerful, mobile application designed specifically for electricians, electrical contractors, and tradespeople. It streamlines the job estimation process, allowing contractors to manage material/labour catalogues, build reusable component assemblies, calculate accurate job costs with markups and wastage, and generate polished PDF quotations on-the-go — completely offline.
+ElectroQuote is a powerful, mobile application designed specifically for electricians, electrical contractors, and tradespeople. It streamlines the job estimation process, allowing contractors to manage material/labour catalogues, build reusable component assemblies, calculate accurate job costs with markups and wastage, and generate polished PDF quotations on-the-go - completely offline.
 
 ---
 
@@ -27,8 +27,8 @@ ElectroQuote is a powerful, mobile application designed specifically for electri
 - **Database**: [Expo SQLite](https://docs.expo.dev/versions/latest/sdk/sqlite/) with versioned SQL schema migrations.
 - **State Management**: [Zustand](https://github.com/pmndrs/zustand) & [React Query (TanStack)](https://tanstack.com/query/latest).
 - **UI Components & Motion**: [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/), [@gorhom/bottom-sheet](https://gorhom.github.io/react-native-bottom-sheet/), [Shopify FlashList](https://shopify.github.io/flash-list/).
-- **Form Management**: `react-hook-form` + `zod` validation
-- **Document Generation**: `expo-print` & `expo-sharing`
+- **Form Management**: `react-hook-form` + `zod` validation.
+- **Document Generation**: `expo-print` & `expo-sharing`.
 
 ---
 
@@ -38,9 +38,9 @@ ElectroQuote is a powerful, mobile application designed specifically for electri
 
 Ensure you have the following installed on your development machine:
 
-- **Node.js** (v18.x or later)
-- **npm** or **yarn** or **pnpm**
-- **Expo Go** app on iOS/Android OR an Android Studio / Xcode emulator setup
+- **Node.js** (v18.x or later).
+- **npm** or **yarn** or **pnpm**.
+- **Expo Go** app on iOS/Android OR an Android Studio / Xcode emulator setup.
 
 ### Installation
 
@@ -61,8 +61,8 @@ Ensure you have the following installed on your development machine:
    ```
 
 4. **Run on specific platforms**:
-   - **Android**: Press `a` in the terminal or run `npm run android`
-   - **iOS**: Press `i` in the terminal or run `npm run ios`
+   - **Android**: Press `a` in the terminal or run `npm run android`.
+   - **iOS**: Press `i` in the terminal or run `npm run ios`.
    - **Web**: Press `w` in the terminal or run `npm run web`
 
 ---
