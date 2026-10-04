@@ -61,7 +61,7 @@ Ensure you have the following installed on your development machine:
    ```
 
 4. **Run on specific platforms**:
-   - **Android**: Press `a` in the terminal or run `npm run android`
+   - **Android**: Press `a` in the terminal or run `npm run android`.
    - **iOS**: Press `i` in the terminal or run `npm run ios`
    - **Web**: Press `w` in the terminal or run `npm run web`
 
