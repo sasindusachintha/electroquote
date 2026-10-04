@@ -28,7 +28,7 @@ ElectroQuote is a powerful, mobile application designed specifically for electri
 - **State Management**: [Zustand](https://github.com/pmndrs/zustand) & [React Query (TanStack)](https://tanstack.com/query/latest).
 - **UI Components & Motion**: [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/), [@gorhom/bottom-sheet](https://gorhom.github.io/react-native-bottom-sheet/), [Shopify FlashList](https://shopify.github.io/flash-list/).
 - **Form Management**: `react-hook-form` + `zod` validation.
-- **Document Generation**: `expo-print` & `expo-sharing`
+- **Document Generation**: `expo-print` & `expo-sharing`.
 
 ---
 
