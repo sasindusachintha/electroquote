@@ -1,5 +1,5 @@
-// app/(tabs)/settings/ai-settings.tsx
-// AI Settings screen — configure local Ollama or Free Cloud AI Provider (Hugging Face, OpenRouter, Groq).
+﻿// app/(tabs)/settings/ai-settings.tsx
+// AI Settings screen â€” configure local Ollama or Free Cloud AI Provider (Hugging Face, OpenRouter, Groq).
 
 import React, { useState } from 'react';
 import {
@@ -17,7 +17,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../../../src/constants/theme';
 import { useAIChatStore } from '../../../src/stores/aiChatStore';
-import { getAIService, PROVIDER_PRESETS } from '../../../src/services/ai/AIService';
+import { getAIService, PROVIDER_PRESETS, DEFAULT_AI_CONFIG, resetAIService } from '../../../src/services/ai/AIService';
 import type { AIProvider } from '../../../src/services/ai/types';
 
 export default function AISettingsScreen() {
@@ -60,7 +60,7 @@ export default function AISettingsScreen() {
     setIsTesting(false);
 
     if (status === 'connected') {
-      Alert.alert('✅ Connected', `Successfully connected to ${PROVIDER_PRESETS[selectedProvider].label}.\nModel "${modelInput}" is ready.`);
+      Alert.alert('âœ… Connected', `Successfully connected to ${PROVIDER_PRESETS[selectedProvider].label}.\nModel "${modelInput}" is ready.`);
     } else {
       Alert.alert(
         'Connection Failed',
@@ -94,12 +94,42 @@ export default function AISettingsScreen() {
 
   const statusLabel =
     connectionStatus === 'connected'
-      ? 'Connected'
+      ? `Connected â€¢ ${PROVIDER_PRESETS[provider].label}`
       : connectionStatus === 'disconnected'
-      ? 'Not reachable'
+      ? 'AI Unavailable'
       : connectionStatus === 'error'
       ? 'Connection / Model Error'
       : 'Checking...';
+
+  function resetAISettings() {
+    Alert.alert(
+      'Reset AI Settings',
+      'This will delete your stored API key and reset the AI configuration to defaults. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => {
+            // Reset all AI state in the store
+            setProvider(DEFAULT_AI_CONFIG.provider);
+            setServerUrl(DEFAULT_AI_CONFIG.baseUrl);
+            setModelName(DEFAULT_AI_CONFIG.model);
+            setApiKey('');
+            setConnectionStatus('checking');
+            // Reset the singleton AI service instance
+            resetAIService();
+            // Update local form state
+            setSelectedProvider(DEFAULT_AI_CONFIG.provider);
+            const preset = PROVIDER_PRESETS[DEFAULT_AI_CONFIG.provider];
+            setUrlInput(preset.baseUrl);
+            setModelInput(preset.defaultModel);
+            setApiKeyInput('');
+          },
+        },
+      ]
+    );
+  }
 
   const currentPreset = PROVIDER_PRESETS[selectedProvider];
 
@@ -219,6 +249,16 @@ export default function AISettingsScreen() {
             <Text style={styles.saveBtnText}>Save</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Reset / Delete credentials */}
+        <TouchableOpacity
+          style={styles.resetBtn}
+          onPress={resetAISettings}
+          activeOpacity={0.75}
+        >
+          <MaterialCommunityIcons name="delete-outline" size={18} color={Colors.error} />
+          <Text style={styles.resetBtnText}>Reset AI Settings &amp; Clear Credentials</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -355,4 +395,22 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontSemiBold,
     color: Colors.textInverse,
   },
+  resetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.error + '50',
+    backgroundColor: Colors.error + '10',
+    marginTop: Spacing.sm,
+  },
+  resetBtnText: {
+    fontSize: Typography.base,
+    fontFamily: Typography.fontSemiBold,
+    color: Colors.error,
+  },
 });
+

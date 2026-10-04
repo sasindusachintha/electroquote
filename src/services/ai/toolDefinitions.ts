@@ -296,4 +296,56 @@ export const ELECTROQUOTE_TOOLS: OllamaTool[] = [
       },
     },
   },
+
+  // ── Quotation save/navigate tools ──────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'createQuotation',
+      description:
+        'Save the current draft quotation (with all approved items) to the database and create a real quotation. ' +
+        'Call this ONLY after the user confirms they are happy with the proposed items. ' +
+        'This will save the quotation to the database and return the quotation ID so the app can navigate to it. ' +
+        'You must have at least one approved item in the draft before calling this. ' +
+        'You can optionally specify a customer name and project/job description for the quotation title.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Optional quotation title, e.g. "3 Bedroom House - Colombo"',
+          },
+          customerName: {
+            type: 'string',
+            description: 'Optional customer name to display in the quotation',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'navigateToQuotation',
+      description:
+        'Navigate the app to a specific quotation detail screen after it has been saved. ' +
+        'Call this after createQuotation returns a quotationId. ' +
+        'This will open the quotation screen where the user can review items, generate PDF and share via WhatsApp.',
+      parameters: {
+        type: 'object',
+        properties: {
+          quotationId: {
+            type: 'number',
+            description: 'The numeric database ID of the quotation to navigate to',
+          },
+          referenceNo: {
+            type: 'string',
+            description: 'The human-readable reference number, e.g. EQ-2026-0001',
+          },
+        },
+        required: ['quotationId', 'referenceNo'],
+      },
+    },
+  },
 ];

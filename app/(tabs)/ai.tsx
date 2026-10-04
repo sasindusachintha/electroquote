@@ -1,6 +1,6 @@
 // app/(tabs)/ai.tsx
-// ElectroQuote AI Assistant screen.
-// Uses a local Ollama server (open-weight model) via HTTP.
+// ElectroQuote AI Assistant screen — fixed and complete.
+// Supports Hugging Face, Ollama, OpenRouter, Groq.
 // All data comes from the ElectroQuote SQLite database — never from the model's memory.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,6 +16,10 @@ import {
   StatusBar,
   Alert,
   Keyboard,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -29,51 +33,77 @@ import { ToolExecutor } from '../../src/services/ai/toolExecutor';
 import { ChatBubble } from '../../src/components/ai/ChatBubble';
 import { AIStatusBanner } from '../../src/components/ai/AIStatusBanner';
 import { SuggestedPrompts } from '../../src/components/ai/SuggestedPrompts';
-import type { ChatMessage, QuoteProposal } from '../../src/services/ai/types';
+import type { QuoteProposal } from '../../src/services/ai/types';
 import type { OllamaMessage } from '../../src/services/ai/types';
-import { generateUUID as uuidv4 } from '../../src/utils/id';
+import { useCustomers } from '../../src/hooks/useCustomers';
+import { useProjects } from '../../src/hooks/useProjects';
 
-// ─── Phase 5: Apply approved proposals to the quotation draft ────────────────
+// ─── User-friendly error messages ────────────────────────────────────────────
+
+function getFriendlyError(err: unknown, providerLabel: string, modelName: string): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lc = msg.toLowerCase();
+  if (lc.includes('401') || lc.includes('unauthorized')) {
+    return `Invalid API key for ${providerLabel}. Check your API key in AI Settings.`;
+  }
+  if (lc.includes('403') || lc.includes('forbidden')) {
+    return `Access denied. Your key may not have permission for model "${modelName}".`;
+  }
+  if (lc.includes('404') || lc.includes('not found')) {
+    return `Model "${modelName}" not found. Check the model name in AI Settings.`;
+  }
+  if (lc.includes('429') || lc.includes('rate limit')) {
+    return `Rate limit reached. Please wait a moment and try again.`;
+  }
+  if (lc.includes('timeout') || lc.includes('aborted') || lc.includes('timed out')) {
+    return `Request timed out. The server may be busy — please try again.`;
+  }
+  if (lc.includes('network') || lc.includes('fetch') || lc.includes('failed to fetch')) {
+    return `Cannot reach the AI server. Check your internet connection and AI Settings.`;
+  }
+  if (lc.includes('model')) {
+    return `Model error: "${modelName}" may not be available. Check AI Settings.`;
+  }
+  return `AI error: ${msg}`;
+}
+
+// ─── Proposal applier hook ────────────────────────────────────────────────────
 
 function useProposalApplier() {
   const db = useSQLiteContext();
   const draftStore = useQuotationDraftStore();
   const approveProposal = useAIChatStore((s) => s.approveProposal);
   const rejectProposal = useAIChatStore((s) => s.rejectProposal);
-  const draft = useQuotationDraftStore((s) => s.draft);
+  const [isApplying, setIsApplying] = useState(false);
 
   const handleApprove = useCallback(
     async (proposalId: string, proposals: QuoteProposal[]) => {
       const proposal = proposals.find((p) => p.id === proposalId);
-      if (!proposal) return;
+      if (!proposal || isApplying) return;
 
+      setIsApplying(true);
       try {
         if (proposal.type === 'add_assembly' && proposal.assemblyId != null) {
-          // Load full assembly from DB, then expand into draft
-          const { AssemblyRepository } = await import(
-            '../../src/db/repositories/AssemblyRepository'
-          );
-          const { BusinessProfileRepository } = await import(
-            '../../src/db/repositories/BusinessProfileRepository'
-          );
-          const assemblyRepo = new AssemblyRepository(db);
-          const profileRepo = new BusinessProfileRepository(db);
-          const assembly = await assemblyRepo.getById(proposal.assemblyId);
-          const profile = await profileRepo.get();
+          const { AssemblyRepository } = await import('../../src/db/repositories/AssemblyRepository');
+          const { BusinessProfileRepository } = await import('../../src/db/repositories/BusinessProfileRepository');
+          const assembly = await new AssemblyRepository(db).getById(proposal.assemblyId);
+          const profile = await new BusinessProfileRepository(db).get();
+          if (!assembly) {
+            Alert.alert('Error', 'Assembly not found in database. It may have been deleted.');
+            return;
+          }
           if (assembly && profile) {
             draftStore.addAssembly(assembly, proposal.quantity ?? 1, profile);
           }
         } else if (proposal.type === 'add_material' && proposal.materialId != null) {
-          const { MaterialRepository } = await import(
-            '../../src/db/repositories/MaterialRepository'
-          );
-          const { BusinessProfileRepository } = await import(
-            '../../src/db/repositories/BusinessProfileRepository'
-          );
-          const materialRepo = new MaterialRepository(db);
-          const profileRepo = new BusinessProfileRepository(db);
-          const material = await materialRepo.getById(proposal.materialId);
-          const profile = await profileRepo.get();
+          const { MaterialRepository } = await import('../../src/db/repositories/MaterialRepository');
+          const { BusinessProfileRepository } = await import('../../src/db/repositories/BusinessProfileRepository');
+          const material = await new MaterialRepository(db).getById(proposal.materialId);
+          const profile = await new BusinessProfileRepository(db).get();
+          if (!material) {
+            Alert.alert('Error', 'Material not found in database. It may have been deleted.');
+            return;
+          }
           if (material && profile) {
             draftStore.addMaterial(material, proposal.quantity ?? 1, profile);
           }
@@ -92,16 +122,17 @@ function useProposalApplier() {
         ) {
           draftStore.removeLine(proposal.sectionLocalId, proposal.lineLocalId);
         }
-
         approveProposal(proposalId);
       } catch (err) {
         Alert.alert('Error', 'Could not apply the change. Please try again.');
+      } finally {
+        setIsApplying(false);
       }
     },
-    [db, draftStore, approveProposal]
+    [db, draftStore, approveProposal, isApplying]
   );
 
-  return { handleApprove, handleReject: rejectProposal };
+  return { handleApprove, handleReject: rejectProposal, isApplying };
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -117,7 +148,6 @@ export default function AIAssistantScreen() {
     provider,
     apiKey,
     ollamaHistory,
-    error,
     addUserMessage,
     addAssistantMessage,
     setThinking,
@@ -127,16 +157,26 @@ export default function AIAssistantScreen() {
     clearChat,
   } = useAIChatStore();
 
-  const draft = useQuotationDraftStore((s) => s.draft);
+  const { draft, resetDraft, setCustomer, setProject } = useQuotationDraftStore();
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const [inputText, setInputText] = useState('');
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const { handleApprove, handleReject } = useProposalApplier();
 
-  // All proposals from all messages (needed for the proposal applier)
-  const allProposals = messages.flatMap((m) => m.proposals ?? []);
+  // Customer/Project picker modal state
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerStep, setPickerStep] = useState<'customer' | 'project'>('customer');
+  const [pickedCustomerId, setPickedCustomerId] = useState<number | null>(null);
+  const [pickedCustomerName, setPickedCustomerName] = useState('');
 
-  // ── Connection check on mount ──────────────────────────────────────────────
+  const { data: customers = [] } = useCustomers();
+  const { data: projects = [] } = useProjects(undefined, pickedCustomerId ?? undefined);
+
+  const allProposals = messages.flatMap((m) => m.proposals ?? []);
+  const draftItemCount = draft.sections.flatMap((s) => s.lineItems).length;
+
+  // ── Connection check ───────────────────────────────────────────────────────
   useEffect(() => {
     checkConnection();
   }, [serverUrl, modelName, provider, apiKey]);
@@ -148,98 +188,152 @@ export default function AIAssistantScreen() {
     setConnectionStatus(status);
   }
 
+  // ── Save draft to DB and navigate ─────────────────────────────────────────
+  async function handleSaveAndViewQuotation() {
+    if (draftItemCount === 0) {
+      Alert.alert('Empty Quotation', 'Please approve at least one item before saving.');
+      return;
+    }
+    // If customer/project not set, open the picker modal
+    if (!draft.customerId || !draft.projectId) {
+      setPickerStep('customer');
+      setPickedCustomerId(null);
+      setPickedCustomerName('');
+      setShowPicker(true);
+      return;
+    }
+    await doSaveDraft();
+  }
+
+  async function doSaveDraft() {
+    if (isSavingDraft) return;
+    setIsSavingDraft(true);
+    try {
+      const { QuotationRepository } = await import('../../src/db/repositories/QuotationRepository');
+      const { BusinessProfileRepository } = await import('../../src/db/repositories/BusinessProfileRepository');
+
+      const profile = await new BusinessProfileRepository(db).get();
+      const currencySymbol = profile?.currencySymbol ?? 'Rs.';
+      // Read the LATEST draft state (not the stale closure) so customer/project
+      // IDs set by the picker are always reflected.
+      const latestDraft = useQuotationDraftStore.getState().draft;
+      // Pass undefined as referenceNo — saveDraft generates it atomically
+      // inside its own transaction, avoiding a nested withTransactionAsync crash.
+      const quotationId = await new QuotationRepository(db).saveDraft(
+        latestDraft,
+        undefined,
+        currencySymbol,
+        undefined,
+        'detailed'
+      );
+      resetDraft();
+      router.push(`/quotations/${quotationId}` as any);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      Alert.alert(
+        'Could not create quotation',
+        `${msg}\n\nPlease try again or use the Quotations tab.`,
+        [
+          { text: 'OK' },
+          { text: 'Go to Quotations', onPress: () => router.push('/quotations' as any) },
+        ]
+      );
+    } finally {
+      setIsSavingDraft(false);
+    }
+  }
+
   // ── Send message ──────────────────────────────────────────────────────────
   async function handleSend(text?: string) {
     const messageText = (text ?? inputText).trim();
-    if (!messageText) return;
-    if (isThinking) return;
+    if (!messageText || isThinking) return;
 
     Keyboard.dismiss();
     setInputText('');
     setError(null);
 
-    // Add user message to UI
     addUserMessage(messageText);
-
-    // Build the new Ollama message
     const userOllamaMsg: OllamaMessage = { role: 'user', content: messageText };
-
     setThinking(true);
 
     try {
       const aiService = getAIService({ provider, baseUrl: serverUrl, model: modelName, apiKey });
       const toolExecutor = new ToolExecutor(db, () => draft);
+      const builtMessages = aiService.buildMessages(ollamaHistory, messageText);
 
-      // Build full message history for the model
-      const messages = aiService.buildMessages(ollamaHistory, messageText);
-
-      const resolvedToolCalls: Array<{ name: string; args: Record<string, unknown>; result: unknown }> = [];
+      const resolvedToolCalls: Array<{
+        name: string;
+        args: Record<string, unknown>;
+        result: unknown;
+        displayLabel: string;
+      }> = [];
       const allNewProposals: QuoteProposal[] = [];
+      let pendingNavigation: { route: string; params: Record<string, string | number> } | undefined;
 
       const result = await aiService.runAgenticTurn(
-        messages,
+        builtMessages,
         async (name, args) => {
           const execResult = await toolExecutor.execute(name, args);
-          if (execResult.proposals) {
-            allNewProposals.push(...execResult.proposals);
-          }
+          if (execResult.proposals) allNewProposals.push(...execResult.proposals);
+          if (execResult.navigationTarget) pendingNavigation = execResult.navigationTarget;
           resolvedToolCalls.push({
             name,
             args,
             result: execResult.toolResult,
+            displayLabel: execResult.displayLabel,
           });
           return { toolResult: execResult.toolResult, proposals: execResult.proposals };
         }
       );
 
-      // Update Ollama history for the next turn
       appendToOllamaHistory(userOllamaMsg);
-      appendToOllamaHistory({
-        role: 'assistant',
-        content: result.finalMessage,
-      });
+      appendToOllamaHistory({ role: 'assistant', content: result.finalMessage });
 
-      // Add assistant message to UI with tool calls and proposals
       addAssistantMessage({
         content: result.finalMessage,
-        toolCalls: resolvedToolCalls.map((tc, i) => ({
+        toolCalls: resolvedToolCalls.map((tc) => ({
           toolName: tc.name,
           args: tc.args,
           result: tc.result,
-          displayLabel: `${tc.name}`,
+          displayLabel: tc.displayLabel,
         })),
         proposals: result.proposals,
       });
-    } catch (err: unknown) {
-      const errorMsg =
-        err instanceof Error ? err.message : 'Unknown error occurred';
 
-      let userFriendlyMsg = 'Could not reach the AI server.';
-      if (errorMsg.includes('timeout') || errorMsg.includes('fetch')) {
-        userFriendlyMsg =
-          'Cannot connect to the local AI server. Make sure Ollama is running on your computer.';
-      } else if (errorMsg.includes('model')) {
-        userFriendlyMsg = `The model "${modelName}" is not loaded in Ollama. Run: ollama run ${modelName}`;
+      // AI triggered quotation creation — navigate after message renders
+      if (pendingNavigation) {
+        const nav = pendingNavigation;
+        resetDraft();
+        setTimeout(() => {
+          router.push(`/quotations/${nav.params.id}` as any);
+        }, 700);
       }
+    } catch (err: unknown) {
+      const providerLabel =
+        provider === 'huggingface' ? 'Hugging Face' :
+        provider === 'ollama' ? 'Ollama' :
+        provider === 'groq' ? 'Groq' :
+        provider === 'openrouter' ? 'OpenRouter' : 'AI';
 
-      setError(userFriendlyMsg);
-      addAssistantMessage({ content: `⚠️ ${userFriendlyMsg}` });
-      setConnectionStatus('disconnected');
+      const msg = getFriendlyError(err, providerLabel, modelName);
+      setError(msg);
+      addAssistantMessage({ content: `\u26a0\ufe0f ${msg}` });
+      setConnectionStatus('error');
     } finally {
       setThinking(false);
     }
   }
 
-  // ── Scroll to bottom when messages change ─────────────────────────────────
+  // ── Auto scroll ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }, [messages.length]);
 
-  // ── Render ────────────────────────────────────────────────────────────────
   const showSuggestedPrompts = messages.length === 0 && connectionStatus === 'connected';
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg0} />
@@ -254,21 +348,17 @@ export default function AIAssistantScreen() {
           </View>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={checkConnection}
-            activeOpacity={0.75}
-          >
+          <TouchableOpacity style={styles.headerBtn} onPress={checkConnection} activeOpacity={0.75}>
             <MaterialCommunityIcons name="refresh" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerBtn}
-            onPress={() => {
+            onPress={() =>
               Alert.alert('Clear Chat', 'Clear the conversation history?', [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Clear', style: 'destructive', onPress: clearChat },
-              ]);
-            }}
+              ])
+            }
             activeOpacity={0.75}
           >
             <MaterialCommunityIcons name="delete-outline" size={20} color={Colors.textSecondary} />
@@ -276,25 +366,43 @@ export default function AIAssistantScreen() {
         </View>
       </View>
 
-      {/* Connection status */}
+      {/* AI connection status */}
       <AIStatusBanner
         status={connectionStatus}
         modelName={modelName}
         serverUrl={serverUrl}
+        provider={provider}
         onPressSettings={() => router.push('/settings/ai-settings' as any)}
       />
 
-      {/* Offline warning */}
-      {connectionStatus === 'disconnected' && (
-        <View style={styles.offlineBanner}>
-          <MaterialCommunityIcons name="information-outline" size={16} color={Colors.warning} />
-          <Text style={styles.offlineText}>
-            AI is unavailable. Your quotation features still work normally.
-          </Text>
+      {/* Draft bar — visible when draft has approved items */}
+      {draftItemCount > 0 && (
+        <View style={styles.draftBar}>
+          <View style={styles.draftBarLeft}>
+            <MaterialCommunityIcons name="file-document-outline" size={16} color={Colors.accent} />
+            <Text style={styles.draftBarText}>
+              {draftItemCount} item{draftItemCount !== 1 ? 's' : ''} approved
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.saveBtn, isSavingDraft && styles.saveBtnDisabled]}
+            onPress={handleSaveAndViewQuotation}
+            disabled={isSavingDraft}
+            activeOpacity={0.75}
+          >
+            {isSavingDraft ? (
+              <ActivityIndicator size="small" color={Colors.textInverse} />
+            ) : (
+              <MaterialCommunityIcons name="content-save-check" size={16} color={Colors.textInverse} />
+            )}
+            <Text style={styles.saveBtnText}>
+              {isSavingDraft ? 'Creating...' : 'Save & View Quotation'}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* Chat messages */}
+      {/* Chat + input */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -310,11 +418,7 @@ export default function AIAssistantScreen() {
             showSuggestedPrompts ? (
               <View style={styles.emptyState}>
                 <View style={styles.welcomeIconWrap}>
-                  <MaterialCommunityIcons
-                    name="robot-excited-outline"
-                    size={48}
-                    color={Colors.accent}
-                  />
+                  <MaterialCommunityIcons name="robot-excited-outline" size={48} color={Colors.accent} />
                 </View>
                 <Text style={styles.welcomeTitle}>ElectroQuote AI</Text>
                 <Text style={styles.welcomeSubtitle}>
@@ -356,7 +460,13 @@ export default function AIAssistantScreen() {
             style={styles.input}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Ask anything about your quote..."
+            placeholder={
+              connectionStatus === 'connected'
+                ? 'Ask anything about your quote...'
+                : connectionStatus === 'checking'
+                ? 'Connecting to AI...'
+                : 'AI unavailable — configure in Settings'
+            }
             placeholderTextColor={Colors.textDisabled}
             multiline
             maxLength={500}
@@ -367,8 +477,8 @@ export default function AIAssistantScreen() {
           />
           <TouchableOpacity
             style={[
-              styles.sendBtn,
-              (!inputText.trim() || isThinking) && styles.sendBtnDisabled,
+              styles.sendBtn2,
+              (!inputText.trim() || isThinking) && styles.sendBtnDisabled2,
             ]}
             onPress={() => handleSend()}
             disabled={!inputText.trim() || isThinking}
@@ -377,13 +487,129 @@ export default function AIAssistantScreen() {
             <MaterialCommunityIcons
               name="send"
               size={20}
-              color={
-                !inputText.trim() || isThinking ? Colors.textDisabled : Colors.textInverse
-              }
+              color={!inputText.trim() || isThinking ? Colors.textDisabled : Colors.textInverse}
             />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* ── Customer / Project picker modal ────────────────────────────── */}
+      <Modal
+        visible={showPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPicker(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowPicker(false)} />
+        <View style={styles.modalSheet}>
+          {/* Modal header */}
+          <View style={styles.modalHeader}>
+            {pickerStep === 'project' && (
+              <TouchableOpacity
+                onPress={() => setPickerStep('customer')}
+                style={styles.modalBackBtn}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="arrow-left" size={20} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+            <View style={styles.modalTitleWrap}>
+              <Text style={styles.modalTitle}>
+                {pickerStep === 'customer' ? 'Select Customer' : `Projects — ${pickedCustomerName}`}
+              </Text>
+              <Text style={styles.modalSubtitle}>
+                {pickerStep === 'customer'
+                  ? 'Link this quotation to a customer'
+                  : 'Pick a project for this quotation'}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowPicker(false)} activeOpacity={0.7}>
+              <MaterialCommunityIcons name="close" size={22} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Customer step */}
+          {pickerStep === 'customer' && (
+            <ScrollView
+              style={styles.pickerList}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {customers.length === 0 ? (
+                <View style={styles.pickerEmpty}>
+                  <MaterialCommunityIcons name="account-off-outline" size={40} color={Colors.textDisabled} />
+                  <Text style={styles.pickerEmptyText}>No customers found.</Text>
+                  <Text style={styles.pickerEmptyHint}>Add customers in the Customers tab first.</Text>
+                </View>
+              ) : (
+                customers.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={styles.pickerRow}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setPickedCustomerId(c.id);
+                      setPickedCustomerName(c.name);
+                      setCustomer(c.id);
+                      setPickerStep('project');
+                    }}
+                  >
+                    <View style={styles.pickerRowIcon}>
+                      <MaterialCommunityIcons name="account-outline" size={18} color={Colors.accent} />
+                    </View>
+                    <View style={styles.pickerRowText}>
+                      <Text style={styles.pickerRowName}>{c.name}</Text>
+                      {c.company ? <Text style={styles.pickerRowSub}>{c.company}</Text> : null}
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={Colors.textDisabled} />
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          )}
+
+          {/* Project step */}
+          {pickerStep === 'project' && (
+            <ScrollView
+              style={styles.pickerList}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {projects.length === 0 ? (
+                <View style={styles.pickerEmpty}>
+                  <MaterialCommunityIcons name="folder-open-outline" size={40} color={Colors.textDisabled} />
+                  <Text style={styles.pickerEmptyText}>No projects for this customer.</Text>
+                  <Text style={styles.pickerEmptyHint}>Create a project in the Projects screen first.</Text>
+                </View>
+              ) : (
+                projects.map((p) => (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={styles.pickerRow}
+                    activeOpacity={0.7}
+                    onPress={async () => {
+                      setProject(p.id);
+                      setShowPicker(false);
+                      // Small delay so state updates propagate before saving
+                      await new Promise((r) => setTimeout(r, 80));
+                      await doSaveDraft();
+                    }}
+                  >
+                    <View style={styles.pickerRowIcon}>
+                      <MaterialCommunityIcons name="folder-outline" size={18} color={Colors.accent} />
+                    </View>
+                    <View style={styles.pickerRowText}>
+                      <Text style={styles.pickerRowName}>{p.name}</Text>
+                      {p.siteAddress ? <Text style={styles.pickerRowSub}>{p.siteAddress}</Text> : null}
+                    </View>
+                    <MaterialCommunityIcons name="content-save-check-outline" size={20} color={Colors.success} />
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -394,7 +620,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg0 },
   flex: { flex: 1 },
 
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -404,11 +629,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   headerTitle: {
     fontSize: Typography.md,
     fontFamily: Typography.fontBold,
@@ -420,10 +641,7 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontRegular,
     color: Colors.textSecondary,
   },
-  headerRight: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
+  headerRight: { flexDirection: 'row', gap: Spacing.sm },
   headerBtn: {
     width: 36,
     height: 36,
@@ -433,32 +651,45 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Offline banner
-  offlineBanner: {
+  draftBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.warning + '15',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.accent + '18',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.warning + '30',
+    borderBottomColor: Colors.accent + '35',
     paddingHorizontal: Spacing.base,
     paddingVertical: Spacing.sm,
   },
-  offlineText: {
-    flex: 1,
+  draftBarLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  draftBarText: {
+    fontSize: Typography.sm,
+    fontFamily: Typography.fontMedium,
+    color: Colors.accent,
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.accent,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    ...Shadow.accent,
+  },
+  saveBtnDisabled: { opacity: 0.6 },
+  saveBtnText: {
     fontSize: Typography.xs,
-    fontFamily: Typography.fontRegular,
-    color: Colors.warning,
+    fontFamily: Typography.fontSemiBold,
+    color: Colors.textInverse,
   },
 
-  // Messages
   messageList: {
     paddingTop: Spacing.md,
     paddingBottom: Spacing.xl,
     flexGrow: 1,
   },
 
-  // Empty / welcome state
   emptyState: {
     alignItems: 'center',
     padding: Spacing.xl,
@@ -491,7 +722,6 @@ const styles = StyleSheet.create({
     maxWidth: 300,
   },
 
-  // Input bar
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -516,7 +746,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     maxHeight: 120,
   },
-  sendBtn: {
+  sendBtn2: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -525,9 +755,104 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...Shadow.accent,
   },
-  sendBtnDisabled: {
+  sendBtnDisabled2: {
     backgroundColor: Colors.bg2,
     shadowOpacity: 0,
     elevation: 0,
   },
+
+  // ── Picker modal ──────────────────────────────────────────────────
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  modalSheet: {
+    backgroundColor: Colors.bg1,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    maxHeight: '72%',
+    paddingBottom: Spacing.xxl,
+    ...Shadow.lg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.base,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    gap: Spacing.sm,
+  },
+  modalBackBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.bg2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitleWrap: { flex: 1 },
+  modalTitle: {
+    fontSize: Typography.md,
+    fontFamily: Typography.fontBold,
+    color: Colors.textPrimary,
+    letterSpacing: -0.3,
+  },
+  modalSubtitle: {
+    fontSize: Typography.xs,
+    fontFamily: Typography.fontRegular,
+    color: Colors.textSecondary,
+    marginTop: 1,
+  },
+  pickerList: {
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.sm,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  pickerRowIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.accent + '18',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerRowText: { flex: 1 },
+  pickerRowName: {
+    fontSize: Typography.base,
+    fontFamily: Typography.fontMedium,
+    color: Colors.textPrimary,
+  },
+  pickerRowSub: {
+    fontSize: Typography.xs,
+    fontFamily: Typography.fontRegular,
+    color: Colors.textSecondary,
+    marginTop: 1,
+  },
+  pickerEmpty: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xxxl,
+  },
+  pickerEmptyText: {
+    fontSize: Typography.base,
+    fontFamily: Typography.fontMedium,
+    color: Colors.textSecondary,
+  },
+  pickerEmptyHint: {
+    fontSize: Typography.sm,
+    fontFamily: Typography.fontRegular,
+    color: Colors.textDisabled,
+    textAlign: 'center',
+    maxWidth: 260,
+  },
 });
+

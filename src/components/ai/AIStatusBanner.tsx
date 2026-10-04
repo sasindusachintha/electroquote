@@ -5,12 +5,13 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
-import type { AIConnectionStatus } from '../../services/ai/types';
+import type { AIConnectionStatus, AIProvider } from '../../services/ai/types';
 
 interface Props {
   status: AIConnectionStatus;
   modelName: string;
   serverUrl: string;
+  provider?: AIProvider;
   onPressSettings?: () => void;
 }
 
@@ -19,13 +20,20 @@ const STATUS_CONFIGS: Record<
   { color: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string }
 > = {
   checking: { color: Colors.textSecondary, icon: 'circle-outline', label: 'Connecting...' },
-  connected: { color: Colors.success, icon: 'circle', label: 'Local AI Active' },
+  connected: { color: Colors.success, icon: 'circle', label: 'AI Connected' },
   disconnected: { color: Colors.warning, icon: 'circle-off-outline', label: 'AI Unavailable' },
   error: { color: Colors.error, icon: 'alert-circle-outline', label: 'AI Error' },
 };
 
-export function AIStatusBanner({ status, modelName, serverUrl, onPressSettings }: Props) {
+export function AIStatusBanner({ status, modelName, serverUrl, provider, onPressSettings }: Props) {
   const cfg = STATUS_CONFIGS[status];
+
+  const providerLabel =
+    provider === 'huggingface' ? 'Hugging Face' :
+    provider === 'ollama' ? 'Ollama' :
+    provider === 'groq' ? 'Groq' :
+    provider === 'openrouter' ? 'OpenRouter' :
+    provider === 'custom' ? 'Custom API' : 'AI';
 
   return (
     <TouchableOpacity
@@ -39,17 +47,22 @@ export function AIStatusBanner({ status, modelName, serverUrl, onPressSettings }
           <Text style={[styles.label, { color: cfg.color }]}>{cfg.label}</Text>
           {status === 'connected' && (
             <Text style={styles.subtitle} numberOfLines={1}>
-              {modelName} · {serverUrl.replace('http://', '')}
+              {providerLabel} · {modelName}
             </Text>
           )}
           {status === 'disconnected' && (
             <Text style={styles.subtitle}>
-              Quotation features still work offline
+              Quotation features still work normally
             </Text>
           )}
           {status === 'error' && (
             <Text style={styles.subtitle}>
-              Check server URL in AI Settings
+              Check API key and model name in AI Settings
+            </Text>
+          )}
+          {status === 'checking' && (
+            <Text style={styles.subtitle}>
+              Testing connection to {providerLabel}...
             </Text>
           )}
         </View>

@@ -1,17 +1,19 @@
 // src/services/ai/toolExecutor.ts
 // Executes AI tool calls against the real ElectroQuote SQLite database.
-// This is the anti-hallucination layer — ALL data comes from here, never from the model.
+// This is the anti-hallucination layer â€” ALL data comes from here, never from the model.
 
 import type * as SQLite from 'expo-sqlite';
 import { MaterialRepository } from '../../db/repositories/MaterialRepository';
 import { AssemblyRepository } from '../../db/repositories/AssemblyRepository';
 import { LabourRepository } from '../../db/repositories/LabourRepository';
+import { QuotationRepository } from '../../db/repositories/QuotationRepository';
+import { BusinessProfileRepository } from '../../db/repositories/BusinessProfileRepository';
 import type { QuotationDraft, DraftTotals } from '../../types/models';
 import { computeDraftTotals } from '../QuotationService';
 import { generateUUID as uuidv4 } from '../../utils/id';
 import type { QuoteProposal, ResolvedToolCall } from './types';
 
-// ─── Result shape for tool execution ─────────────────────────────────────────
+// â”€â”€â”€ Result shape for tool execution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface ToolExecutionResult {
   /** The data to send back to the model as the tool response */
@@ -20,14 +22,18 @@ export interface ToolExecutionResult {
   proposals?: QuoteProposal[];
   /** Human-readable label for the chat bubble */
   displayLabel: string;
+  /** If set, the AI screen should navigate to this route after the current AI turn completes */
+  navigationTarget?: { route: string; params: Record<string, string | number> };
 }
 
-// ─── Tool executor class ──────────────────────────────────────────────────────
+// â”€â”€â”€ Tool executor class â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export class ToolExecutor {
   private materialRepo: MaterialRepository;
   private assemblyRepo: AssemblyRepository;
   private labourRepo: LabourRepository;
+  private quotationRepo: QuotationRepository;
+  private businessProfileRepo: BusinessProfileRepository;
 
   constructor(
     private db: SQLite.SQLiteDatabase,
@@ -36,6 +42,8 @@ export class ToolExecutor {
     this.materialRepo = new MaterialRepository(db);
     this.assemblyRepo = new AssemblyRepository(db);
     this.labourRepo = new LabourRepository(db);
+    this.quotationRepo = new QuotationRepository(db);
+    this.businessProfileRepo = new BusinessProfileRepository(db);
   }
 
   /**
@@ -105,6 +113,18 @@ export class ToolExecutor {
           args.reason as string | undefined
         );
 
+      case 'createQuotation':
+        return this.createQuotation(
+          args.title as string | undefined,
+          args.customerName as string | undefined
+        );
+
+      case 'navigateToQuotation':
+        return this.handleNavigateToQuotation(
+          args.quotationId as number,
+          args.referenceNo as string
+        );
+
       default:
         return {
           toolResult: { error: `Unknown tool: ${toolName}` },
@@ -113,7 +133,7 @@ export class ToolExecutor {
     }
   }
 
-  // ── Material tools ──────────────────────────────────────────────────────────
+  // â”€â”€ Material tools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async searchMaterials(query: string, categoryId?: number): Promise<ToolExecutionResult> {
     const materials = await this.materialRepo.search(query, categoryId);
@@ -159,7 +179,7 @@ export class ToolExecutor {
     };
   }
 
-  // ── Assembly tools ──────────────────────────────────────────────────────────
+  // â”€â”€ Assembly tools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async searchAssemblies(query: string): Promise<ToolExecutionResult> {
     const assemblies = await this.assemblyRepo.search(query);
@@ -221,7 +241,7 @@ export class ToolExecutor {
     };
   }
 
-  // ── Labour tools ────────────────────────────────────────────────────────────
+  // â”€â”€ Labour tools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async searchLabour(query: string): Promise<ToolExecutionResult> {
     const items = await this.labourRepo.search(query);
@@ -240,13 +260,13 @@ export class ToolExecutor {
     };
   }
 
-  // ── Quote read tools ────────────────────────────────────────────────────────
+  // â”€â”€ Quote read tools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private getQuoteItems(): ToolExecutionResult {
     const draft = this.getDraft();
     if (!draft.sections || draft.sections.length === 0) {
       return {
-        toolResult: { message: 'The current quotation is empty — no items have been added yet.' },
+        toolResult: { message: 'The current quotation is empty â€” no items have been added yet.' },
         displayLabel: 'Read current quote items',
       };
     }
@@ -300,7 +320,7 @@ export class ToolExecutor {
 
     const suggestions: string[] = [];
 
-    // Heuristic checks — look for common missing items based on what's present
+    // Heuristic checks â€” look for common missing items based on what's present
     const hasSockets = descriptions.some((d) => d.includes('socket'));
     const hasLED = descriptions.some((d) => d.includes('led') || d.includes('light'));
     const hasFan = descriptions.some((d) => d.includes('fan'));
@@ -316,14 +336,14 @@ export class ToolExecutor {
 
     if ((hasSockets || hasLED || hasFan) && !hasDB) {
       suggestions.push(
-        'No Distribution Board found — required for any wiring installation.'
+        'No Distribution Board found â€” required for any wiring installation.'
       );
     }
     if ((hasSockets || hasLED) && !hasMainBreaker) {
-      suggestions.push('No MCB/Circuit Breaker found — check if it is included in the DB assembly.');
+      suggestions.push('No MCB/Circuit Breaker found â€” check if it is included in the DB assembly.');
     }
     if (allLines.length > 0 && !hasEarthing) {
-      suggestions.push('No earthing/grounding material found — this is required by electrical standards.');
+      suggestions.push('No earthing/grounding material found â€” this is required by electrical standards.');
     }
 
     if (allLines.length === 0) {
@@ -342,7 +362,7 @@ export class ToolExecutor {
     };
   }
 
-  // ── Proposal tools (write, but require user approval) ─────────────────────
+  // â”€â”€ Proposal tools (write, but require user approval) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async proposeAddAssembly(
     assemblyId: number,
@@ -374,7 +394,7 @@ export class ToolExecutor {
       status: 'pending',
       assemblyId: assembly.id,
       quantity,
-      label: `Add ${quantity} × ${assembly.name}`,
+      label: `Add ${quantity} Ã— ${assembly.name}`,
       detailLines: [
         `Estimated total: Rs. ${Math.round((materialCost + labourCost) * 100) / 100}`,
         reason ? `Reason: ${reason}` : '',
@@ -389,10 +409,10 @@ export class ToolExecutor {
         assemblyName: assembly.name,
         quantity,
         estimatedCost: Math.round((materialCost + labourCost) * 100) / 100,
-        message: `Proposal created: ${quantity} × ${assembly.name}. Waiting for your approval.`,
+        message: `Proposal created: ${quantity} Ã— ${assembly.name}. Waiting for your approval.`,
       },
       proposals: [proposal],
-      displayLabel: `Proposed: ${quantity} × ${assembly.name}`,
+      displayLabel: `Proposed: ${quantity} Ã— ${assembly.name}`,
     };
   }
 
@@ -473,7 +493,7 @@ export class ToolExecutor {
       lineLocalId,
       sectionLocalId,
       quantity: newQuantity,
-      label: `Change quantity of "${description}": ${line.quantity} → ${newQuantity}`,
+      label: `Change quantity of "${description}": ${line.quantity} â†’ ${newQuantity}`,
       detailLines: [
         `New line total: Rs. ${Math.round(line.unitPrice * newQuantity * 100) / 100}`,
         reason ? `Reason: ${reason}` : '',
@@ -538,4 +558,105 @@ export class ToolExecutor {
       displayLabel: `Proposed removal: "${description}"`,
     };
   }
+
+  // -- Quotation creation / navigation tools -----------------------------------
+
+  private async createQuotation(
+    title?: string,
+    _customerName?: string
+  ): Promise<ToolExecutionResult> {
+    const draft = this.getDraft();
+    const allLines = draft.sections.flatMap((s) => s.lineItems);
+
+    if (allLines.length === 0) {
+      return {
+        toolResult: {
+          error: 'The quotation draft is empty. Please add and approve some items first before saving.',
+        },
+        displayLabel: 'Create quotation failed: draft is empty',
+      };
+    }
+
+    // A quotation must be linked to a customer and project.
+    // If the draft does not have these set, the user must start from the Quotations tab.
+    if (!draft.customerId || !draft.projectId) {
+      return {
+        toolResult: {
+          error: [
+            'Cannot save the quotation yet — a customer and project must be selected first.',
+            'Please go to the Quotations tab, tap the + button, select a customer and project,',
+            'then the AI assistant in that context will have the correct context to save.',
+            '',
+            'Alternatively, the items in the current draft will be available in the Quotations editor.',
+          ].join(' '),
+          hint: 'Go to Quotations tab > + New > select Customer & Project > use AI assistant there.',
+        },
+        displayLabel: 'Create quotation: needs customer & project',
+      };
+    }
+
+    try {
+      const profile = await this.businessProfileRepo.get();
+      const currencySymbol = profile?.currencySymbol ?? 'Rs.';
+      // Pass undefined — saveDraft generates the ref number atomically
+      // inside its own transaction, avoiding a nested withTransactionAsync crash.
+      const draftToSave = title ? { ...draft, title } : draft;
+
+      const quotationId = await this.quotationRepo.saveDraft(
+        draftToSave,
+        undefined,
+        currencySymbol,
+        undefined,
+        'detailed'
+      );
+
+      // Fetch the saved quotation to get the generated reference number
+      const saved = await this.quotationRepo.getById(quotationId);
+      const refNo = saved?.referenceNo ?? `EQ-${new Date().getFullYear()}-????`;
+
+      return {
+        toolResult: {
+          success: true,
+          quotationId,
+          referenceNo: refNo,
+          itemCount: allLines.length,
+          message: `Quotation ${refNo} created successfully with ${allLines.length} line items.`,
+        },
+        displayLabel: `Created quotation ${refNo}`,
+        navigationTarget: {
+          route: '/quotations/[id]',
+          params: { id: quotationId },
+        },
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      return {
+        toolResult: {
+          error: `Failed to save quotation to database: ${msg}. Please try again.`,
+        },
+        displayLabel: 'Create quotation failed',
+      };
+    }
+  }
+
+    private handleNavigateToQuotation(
+    quotationId: number,
+    referenceNo: string
+  ): ToolExecutionResult {
+    return {
+      toolResult: {
+        success: true,
+        quotationId,
+        referenceNo,
+        message: `Navigating to quotation ${referenceNo}.`,
+      },
+      displayLabel: `Navigate to quotation ${referenceNo}`,
+      navigationTarget: {
+        route: '/quotations/[id]',
+        params: { id: quotationId },
+      },
+    };
+  }
 }
+
+

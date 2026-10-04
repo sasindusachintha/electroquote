@@ -1,44 +1,22 @@
 // src/components/ai/ChatBubble.tsx
 // Renders a single chat message (user or assistant).
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
-import type { ChatMessage, ResolvedToolCall } from '../../services/ai/types';
+import type { ChatMessage } from '../../services/ai/types';
 import { ProposalCard } from './ProposalCard';
 
 interface Props {
   message: ChatMessage;
   onApproveProposal: (proposalId: string) => void;
   onRejectProposal: (proposalId: string) => void;
-}
-
-function ToolCallBadge({ toolCall }: { toolCall: ResolvedToolCall }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <TouchableOpacity
-      style={styles.toolBadge}
-      onPress={() => setExpanded((e) => !e)}
-      activeOpacity={0.75}
-    >
-      <MaterialCommunityIcons name="database-search" size={13} color={Colors.info} />
-      <Text style={styles.toolBadgeText} numberOfLines={expanded ? undefined : 1}>
-        {toolCall.displayLabel}
-      </Text>
-      <MaterialCommunityIcons
-        name={expanded ? 'chevron-up' : 'chevron-down'}
-        size={14}
-        color={Colors.textDisabled}
-      />
-    </TouchableOpacity>
-  );
 }
 
 export function ChatBubble({ message, onApproveProposal, onRejectProposal }: Props) {
@@ -64,15 +42,6 @@ export function ChatBubble({ message, onApproveProposal, onRejectProposal }: Pro
       </View>
 
       <View style={styles.assistantContent}>
-        {/* Tool calls (collapsed by default) */}
-        {message.toolCalls && message.toolCalls.length > 0 && (
-          <View style={styles.toolCalls}>
-            {message.toolCalls.map((tc, i) => (
-              <ToolCallBadge key={i} toolCall={tc} />
-            ))}
-          </View>
-        )}
-
         {/* Message text or loading */}
         <View style={styles.assistantBubble}>
           {isLoading ? (
@@ -171,28 +140,6 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontRegular,
     fontSize: Typography.base,
     lineHeight: 22,
-  },
-
-  // Tool calls
-  toolCalls: {
-    gap: 4,
-  },
-  toolBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    backgroundColor: Colors.info + '15',
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    borderColor: Colors.info + '30',
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-  },
-  toolBadgeText: {
-    flex: 1,
-    fontSize: Typography.xs,
-    color: Colors.info,
-    fontFamily: Typography.fontRegular,
   },
 
   // Loading

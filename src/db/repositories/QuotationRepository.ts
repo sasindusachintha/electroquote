@@ -192,19 +192,42 @@ export class QuotationRepository {
   /**
    * Persist a full draft to the database.
    * If draft.quotationId is set, it updates; otherwise it inserts.
+   * referenceNo is optional — when omitted it is generated atomically
+   * inside this transaction so we never nest two withTransactionAsync calls.
    * Returns the saved quotation's ID.
    */
   async saveDraft(
     draft: QuotationDraft,
-    referenceNo: string,
+    referenceNo: string | undefined,
     currencySymbol: string,
     validUntil?: string,
     pdfMode: 'detailed' | 'simple' = 'detailed'
   ): Promise<number> {
     const totals = computeDraftTotals(draft);
     let quotationId = draft.quotationId;
+    // If no reference number was supplied we generate one here so that the
+    // sequence-update and the quotation INSERT happen in the same transaction.
+    let resolvedRefNo = referenceNo ?? '';
 
     await this.db.withTransactionAsync(async () => {
+      if (!resolvedRefNo) {
+        // Generate reference number atomically inside this transaction
+        const year = new Date().getFullYear();
+        await this.db.runAsync(
+          `INSERT INTO quotation_sequence (year, next_seq) VALUES (?, 1) ON CONFLICT(year) DO NOTHING`,
+          [year]
+        );
+        const row = await this.db.getFirstAsync<{ next_seq: number }>(
+          'SELECT next_seq FROM quotation_sequence WHERE year = ?',
+          [year]
+        );
+        const seq = row?.next_seq ?? 1;
+        resolvedRefNo = `EQ-${year}-${String(seq).padStart(4, '0')}`;
+        await this.db.runAsync(
+          'UPDATE quotation_sequence SET next_seq = next_seq + 1 WHERE year = ?',
+          [year]
+        );
+      }
       if (quotationId == null) {
         // INSERT new quotation
         const r = await this.db.runAsync(
@@ -217,8 +240,9 @@ export class QuotationRepository {
              discount_amount, subtotal_after_discount, vat_amount, grand_total,
              notes, terms
            ) VALUES (?,?,?,?,?,date('now'),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          // referenceNo resolved above
           [
-            draft.projectId!, draft.customerId!, referenceNo,
+            draft.projectId!, draft.customerId!, resolvedRefNo,
             draft.title || null, 'draft',
             validUntil ?? null, currencySymbol,
             draft.discountType ?? null, draft.discountValue, draft.discountNote || null,

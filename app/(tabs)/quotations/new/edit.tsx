@@ -21,7 +21,6 @@ import { Colors, Typography, Spacing, Radius, Shadow } from '../../../../src/con
 import { useQuotationDraftStore } from '../../../../src/stores/quotationDraftStore';
 import { BusinessProfileRepository } from '../../../../src/db/repositories/BusinessProfileRepository';
 import { QuotationRepository } from '../../../../src/db/repositories/QuotationRepository';
-import { ReferenceService } from '../../../../src/services/ReferenceService';
 import { generateUUID } from '../../../../src/utils/id';
 import { useCustomers } from '../../../../src/hooks/useCustomers';
 import { useProjects } from '../../../../src/hooks/useProjects';
@@ -191,16 +190,21 @@ export default function QuotationBuilderScreen() {
     setIsSaving(true);
     try {
       const qRepo = new QuotationRepository(db);
-      const refNo = await ReferenceService.next(db);
+      // Pass undefined \u2014 saveDraft generates the ref number atomically
+      // inside its own transaction, avoiding a nested withTransactionAsync crash.
       const currencySymbol = businessProfile?.currencySymbol || 'Rs.';
 
       const savedId = await qRepo.saveDraft(
         draft,
-        refNo,
+        undefined,
         currencySymbol,
         undefined, // validUntil default
         'detailed'
       );
+
+      // Fetch the generated reference number for the success toast
+      const saved = await qRepo.getById(savedId);
+      const refNo = saved?.referenceNo ?? '';
 
       showMessage({
         message: `Quotation ${refNo} saved successfully!`,

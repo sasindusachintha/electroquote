@@ -17,9 +17,9 @@ import { ELECTROQUOTE_TOOLS } from './toolDefinitions';
 // ─── Default Configuration ────────────────────────────────────────────────────
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
-  provider: 'ollama',
-  baseUrl: 'http://localhost:11434',
-  model: 'qwen2.5:1.5b',
+  provider: 'huggingface',
+  baseUrl: 'https://router.huggingface.co/v1',
+  model: 'Qwen/Qwen3-8B',
   apiKey: '',
   temperature: 0.2,          // Low temperature = more factual, less creative
   maxContextTokens: 4096,
@@ -53,9 +53,9 @@ export const PROVIDER_PRESETS: Record<AIProvider, { baseUrl: string; defaultMode
     requiresKey: false,
   },
   huggingface: {
-    label: 'Hugging Face (Free Open Models)',
-    baseUrl: 'https://router.huggingface.co/hf-inference/v1',
-    defaultModel: 'Qwen/Qwen2.5-Coder-32B-Instruct',
+    label: 'Hugging Face Inference',
+    baseUrl: 'https://router.huggingface.co/v1',
+    defaultModel: 'Qwen/Qwen3-8B',
     requiresKey: true,
   },
   openrouter: {
@@ -93,6 +93,7 @@ export class AIService {
 
   /**
    * Check connection status for the configured provider.
+   * Uses the same endpoint the real chat uses for accuracy.
    */
   async checkConnection(): Promise<AIConnectionStatus> {
     try {
@@ -110,23 +111,38 @@ export class AIService {
         return hasModel ? 'connected' : 'error';
       }
 
-      // Online OpenAI-compatible endpoint health check (models endpoint)
+      // For cloud providers: send a minimal chat request to verify the key + model are valid
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (this.config.apiKey) {
         headers['Authorization'] = `Bearer ${this.config.apiKey}`;
       }
-      
-      const endpoint = this.config.baseUrl.endsWith('/v1') 
-        ? `${this.config.baseUrl}/models` 
-        : `${this.config.baseUrl}/v1/models`;
+      if (this.config.provider === 'openrouter') {
+        headers['HTTP-Referer'] = 'https://electroquote.app';
+        headers['X-Title'] = 'ElectroQuote AI';
+      }
+
+      const endpoint = this.config.baseUrl.endsWith('/chat/completions')
+        ? this.config.baseUrl
+        : this.config.baseUrl.endsWith('/v1')
+          ? `${this.config.baseUrl}/chat/completions`
+          : `${this.config.baseUrl}/v1/chat/completions`;
 
       const response = await fetch(endpoint, {
-        method: 'GET',
+        method: 'POST',
         headers,
-        signal: AbortSignal.timeout(6000),
+        body: JSON.stringify({
+          model: this.config.model,
+          messages: [{ role: 'user', content: 'Hi' }],
+          max_tokens: 1,
+        }),
+        signal: AbortSignal.timeout(10000),
       });
 
-      return response.ok || response.status === 401 ? 'connected' : 'error';
+      if (response.ok) return 'connected';
+      if (response.status === 401 || response.status === 403) return 'error'; // bad key
+      if (response.status === 404) return 'error'; // bad model/endpoint
+      if (response.status === 429) return 'connected'; // rate-limited but key is valid
+      return 'disconnected';
     } catch {
       return 'disconnected';
     }

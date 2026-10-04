@@ -61,9 +61,9 @@ interface AIChatState {
 
 export const useAIChatStore = create<AIChatState>((set, get) => ({
   connectionStatus: 'checking',
-  provider: 'ollama',
-  serverUrl: 'http://localhost:11434',
-  modelName: 'qwen2.5:1.5b',
+  provider: 'huggingface',
+  serverUrl: 'https://router.huggingface.co/v1',
+  modelName: 'Qwen/Qwen3-8B',
   apiKey: '',
 
   messages: [],
